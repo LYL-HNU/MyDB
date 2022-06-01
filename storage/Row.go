@@ -52,7 +52,7 @@ func (R *Row) GetRowSize() int {
 }
 
 func (R *Row) SerializeId(destination []byte) {
-	var intByte []byte
+	var intByte []byte = make([]byte, 4)
 	binary.LittleEndian.PutUint32(intByte, uint32(R.id))
 	copy(destination, intByte)
 }
@@ -67,7 +67,7 @@ func (R *Row) SerializeEmail(destination []byte) {
 
 func (R *Row) DeSerializeId(destination []byte) {
 	var id uint32
-	binary.LittleEndian.PutUint32(destination, id)
+	id = binary.LittleEndian.Uint32(destination)
 	R.id = int32(id)
 }
 

@@ -50,11 +50,20 @@ func prepareStatament(statement *util.Statement, inputBuffer *util.InputBuffer) 
 		//获取用户输入id userName email
 		var id uint32
 		var userName, email string
-		argsAssined, err := fmt.Sscanf(inputBuffer.Buffer, "%d %s %s", &id, &userName, &email)
+		argsAssined, err := fmt.Sscanf(inputBuffer.Buffer, "insert %d %s %s", &id, &userName, &email)
 		var idByte, userNameByte, emailByte []byte
+		idByte = make([]byte, 4)
+		userNameByte = make([]byte, storage.ColumnUsernameSize)
+		emailByte = make([]byte, storage.ColumnEmailSize)
 		binary.LittleEndian.PutUint32(idByte, id)
 		userNameByte = []byte(userName)
+		if cap(userNameByte) < storage.ColumnUsernameSize {
+			userNameByte = append(userNameByte, make([]byte, storage.ColumnUsernameSize-cap(userNameByte))...)
+		}
 		emailByte = []byte(email)
+		if cap(emailByte) < storage.ColumnEmailSize {
+			emailByte = append(emailByte, make([]byte, storage.ColumnEmailSize-cap(emailByte))...)
+		}
 		//将id userName email 插入 Row 中
 		statement.RowInsert.DeSerializeId(idByte)
 		statement.RowInsert.DeSerializeUserName(userNameByte)
@@ -97,21 +106,21 @@ func deserializeRow(row *storage.Row, destination []byte) {
 	row.DeSerializeEmail(destination[row.GetEmailOffset() : row.GetEmailOffset()+row.GetEmailSize()])
 }
 
-func GetRowsPerPage(rowNum uint32) uint32 {
+func GetRowsPerPage(row *storage.Row) uint32 {
 	const PageSize = 4096
-	return PageSize / rowNum
+	return uint32(PageSize / row.GetRowSize())
 }
 
 func rowSlot(table *storage.Table, rowNum uint32) []byte {
 	var pageNum uint32
-	pageNum = GetRowsPerPage(rowNum)
+	pageNum = rowNum / GetRowsPerPage(new(storage.Row))
 	var page *storage.Page
 	page = table.GetPage(pageNum)
 	if page == nil {
 		//该页未有内容
 		page = &storage.Page{}
 	}
-	rowOffset := rowNum % GetRowsPerPage(rowNum)
+	rowOffset := rowNum % GetRowsPerPage(new(storage.Row))
 	var r storage.Row
 	byteOffset := rowOffset * uint32(r.GetRowSize())
 	return page.GetDestinationRow(byteOffset, &r)
@@ -149,8 +158,10 @@ func main() {
 	for true {
 		var state util.Statement
 		printPromt()
+		input.InitInput()
 		input.ReadInput()
-		if strings.Compare(input.Buffer[0:1], ".") == 0 {
+		flag := strings.Compare(input.Buffer[0:1], ".")
+		if flag == 0 {
 			switch doMetaCommand(&input, &table) {
 			case MetaCommandSuccess:
 				//输入下一个命令
