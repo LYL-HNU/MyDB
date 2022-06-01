@@ -30,3 +30,7 @@ func (Table *Table) GetNumRows() uint32 {
 func (Table *Table) InsertRow() {
 	Table.numRows++
 }
+
+func (Table *Table) SetPage(pageNum uint32, page *Page) {
+	Table.pages[pageNum] = page
+}

@@ -43,7 +43,7 @@ func doMetaCommand(inputBuffer *util.InputBuffer, table *storage.Table) int {
 	return MetaCommandUnrecognizedCommand
 }
 
-func prepareStatament(statement *util.Statement, inputBuffer *util.InputBuffer) int {
+func prepareStatament(statement *util.Statement, inputBuffer *util.InputBuffer) (int, error) {
 	if strings.Compare(inputBuffer.Buffer[0:6], "insert") == 0 {
 		statement.SetStatementType(StatementInsert)
 
@@ -69,19 +69,19 @@ func prepareStatament(statement *util.Statement, inputBuffer *util.InputBuffer) 
 		statement.RowInsert.DeSerializeUserName(userNameByte)
 		statement.RowInsert.DeSerializeEmail(emailByte)
 		if err != nil {
-			panic(err)
+			return PrepareSyntaxError, err
 		}
 		if argsAssined < 3 {
-			panic(fmt.Errorf("wrong input command -> %s", inputBuffer.Buffer))
+			return PrepareSyntaxError, fmt.Errorf("wrong input command -> %s", inputBuffer.Buffer)
 		}
-		return PrepareSuccess
+		return PrepareSuccess, nil
 	}
 
 	if strings.Compare(inputBuffer.Buffer, "select") == 0 {
 		statement.SetStatementType(StatementSelect)
-		return PrepareSuccess
+		return PrepareSuccess, nil
 	}
-	return PrepareUnrecognizedStatement
+	return PrepareUnrecognizedStatement, nil
 }
 
 func executeStatement(statement *util.Statement, table *storage.Table) int {
@@ -118,7 +118,8 @@ func rowSlot(table *storage.Table, rowNum uint32) []byte {
 	page = table.GetPage(pageNum)
 	if page == nil {
 		//该页未有内容
-		page = &storage.Page{}
+		page = new(storage.Page)
+		table.SetPage(pageNum, page)
 	}
 	rowOffset := rowNum % GetRowsPerPage(new(storage.Row))
 	var r storage.Row
@@ -172,7 +173,11 @@ func main() {
 			}
 		}
 
-		switch prepareStatament(&state, &input) {
+		prepareResult, err := prepareStatament(&state, &input)
+		if err != nil {
+			fmt.Println("wrong " + err.Error())
+		}
+		switch prepareResult {
 		case PrepareSuccess:
 			break
 		case PrepareSyntaxError:
@@ -190,6 +195,5 @@ func main() {
 		case ExecuteTableFull:
 			panic(fmt.Errorf("wrong. Table Full"))
 		}
-		fmt.Println("Executed.")
 	}
 }
