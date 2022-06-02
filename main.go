@@ -16,6 +16,8 @@ const (
 
 const (
 	PrepareSuccess = iota
+	PrepareNegativeId
+	PrepareStringTooLong
 	PrepareUnrecognizedStatement
 	PrepareSyntaxError
 )
@@ -51,19 +53,32 @@ func prepareStatament(statement *util.Statement, inputBuffer *util.InputBuffer) 
 		var id uint32
 		var userName, email string
 		argsAssined, err := fmt.Sscanf(inputBuffer.Buffer, "insert %d %s %s", &id, &userName, &email)
+
+		if id < 0 {
+			return PrepareNegativeId, fmt.Errorf("wrong id -> %d", id)
+		}
+
+		if userName == "" || email == "" {
+			return PrepareSyntaxError, fmt.Errorf("wrong userName -> %s, email -> %s", userName, email)
+		}
+
+		if len(userName) > storage.ColumnUsernameSize || len(email) > storage.ColumnEmailSize {
+			return PrepareStringTooLong, fmt.Errorf("input may be too long")
+		}
+
 		var idByte, userNameByte, emailByte []byte
 		idByte = make([]byte, 4)
 		userNameByte = make([]byte, storage.ColumnUsernameSize)
 		emailByte = make([]byte, storage.ColumnEmailSize)
 		binary.LittleEndian.PutUint32(idByte, id)
 		userNameByte = []byte(userName)
-		if cap(userNameByte) < storage.ColumnUsernameSize {
-			userNameByte = append(userNameByte, make([]byte, storage.ColumnUsernameSize-cap(userNameByte))...)
-		}
+		//if cap(userNameByte) < storage.ColumnUsernameSize {
+		//	userNameByte = append(userNameByte, make([]byte, storage.ColumnUsernameSize-cap(userNameByte))...)
+		//}
 		emailByte = []byte(email)
-		if cap(emailByte) < storage.ColumnEmailSize {
-			emailByte = append(emailByte, make([]byte, storage.ColumnEmailSize-cap(emailByte))...)
-		}
+		//if cap(emailByte) < storage.ColumnEmailSize {
+		//	emailByte = append(emailByte, make([]byte, storage.ColumnEmailSize-cap(emailByte))...)
+		//}
 		//将id userName email 插入 Row 中
 		statement.RowInsert.DeSerializeId(idByte)
 		statement.RowInsert.DeSerializeUserName(userNameByte)
@@ -180,6 +195,12 @@ func main() {
 		switch prepareResult {
 		case PrepareSuccess:
 			break
+		case PrepareNegativeId:
+			fmt.Println("Input id must >= 0")
+			continue
+		case PrepareStringTooLong:
+			fmt.Println("String is too long")
+			continue
 		case PrepareSyntaxError:
 			fmt.Println("Syntax error. Could not parse statement.")
 			continue
