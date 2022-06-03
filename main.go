@@ -39,7 +39,7 @@ func printPromt() {
 func doMetaCommand(inputBuffer *util.InputBuffer, table *storage.Table) int {
 	if strings.Compare(inputBuffer.Buffer, ".exit") == 0 {
 		inputBuffer.CloseInput()
-		table.InitTable()
+		table.DBClose()
 		os.Exit(0)
 	}
 	return MetaCommandUnrecognizedCommand
@@ -136,6 +136,7 @@ func rowSlot(table *storage.Table, rowNum uint32) []byte {
 		page = new(storage.Page)
 		table.SetPage(pageNum, page)
 	}
+	//todo，从bufferPool中拿page
 	rowOffset := rowNum % GetRowsPerPage(new(storage.Row))
 	var r storage.Row
 	byteOffset := rowOffset * uint32(r.GetRowSize())
@@ -170,7 +171,7 @@ func main() {
 		BufferLength: 0,
 	}
 	var table storage.Table
-	table.InitTable()
+	table.DBOpen("MyData")
 	for true {
 		var state util.Statement
 		printPromt()
