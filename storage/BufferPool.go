@@ -43,10 +43,13 @@ func (bufferPool *BufferPool) GetPage(pageNum uint32) *Page {
 		}
 		page := new(Page)
 		pageByte := make([]byte, PageSize)
+		//待解决，读取不满这么多字节
 		L, err := bufferPool.fileDesc.ReadAt(pageByte, int64(pageNum*PageSize))
 		if err != nil {
-			fmt.Printf("getPage Error: %s \n", err.Error())
-			os.Exit(3)
+			fmt.Printf("getPage Len: %d Error: %s \n", L, err.Error())
+			if err.Error() != "EOF" {
+				os.Exit(3)
+			}
 		}
 		fmt.Printf("read Page Size is: %d \n", L)
 		page.SetPage(pageByte)
@@ -55,10 +58,24 @@ func (bufferPool *BufferPool) GetPage(pageNum uint32) *Page {
 	return bufferPool.pages[pageNum]
 }
 
-func (bufferPool *BufferPool) FlushBack(pageNum uint32) {
+func (bufferPool *BufferPool) FlushPageBack(pageNum uint32) {
 	pageByte := make([]byte, PageSize)
 	tmp := bufferPool.pages[pageNum].Page
 	for i := 0; i < len(tmp); i++ {
+		pageByte[i] = tmp[i]
+	}
+	_, err := bufferPool.fileDesc.Write(pageByte)
+	if err != nil {
+		fmt.Printf("Wrong Flush Back")
+	}
+}
+
+func (bufferPool *BufferPool) FlushRowsBack(pageNum uint32, additionalRow uint32) {
+	rowSize := new(Row).GetRowSize()
+	writeByte := rowSize * int(additionalRow)
+	pageByte := make([]byte, writeByte)
+	tmp := bufferPool.pages[pageNum].Page
+	for i := 0; i < writeByte; i++ {
 		pageByte[i] = tmp[i]
 	}
 	_, err := bufferPool.fileDesc.Write(pageByte)

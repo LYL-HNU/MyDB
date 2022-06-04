@@ -136,7 +136,6 @@ func rowSlot(table *storage.Table, rowNum uint32) []byte {
 		page = new(storage.Page)
 		table.SetPage(pageNum, page)
 	}
-	//todo，从bufferPool中拿page
 	rowOffset := rowNum % GetRowsPerPage(new(storage.Row))
 	var r storage.Row
 	byteOffset := rowOffset * uint32(r.GetRowSize())

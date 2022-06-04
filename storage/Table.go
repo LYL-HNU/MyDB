@@ -13,10 +13,11 @@ type Table struct {
 	numRows    uint32
 	pages      [TableMaxPages]*Page
 	bufferpool *BufferPool
+	modifyFLag bool
 }
 
 func (Table *Table) GetPage(pageNum uint32) *Page {
-	return Table.pages[pageNum]
+	return Table.bufferpool.GetPage(pageNum)
 }
 
 // InitTable 初始化或清楚
@@ -25,6 +26,7 @@ func (Table *Table) InitTable() {
 	for i := 0; i < TableMaxPages; i++ {
 		Table.pages[i] = nil
 	}
+	Table.modifyFLag = false
 }
 
 // GetNumRows 返回表中行数
@@ -34,6 +36,7 @@ func (Table *Table) GetNumRows() uint32 {
 
 // InsertRow 表中新增了一行
 func (Table *Table) InsertRow() {
+	Table.modifyFLag = true
 	Table.numRows++
 }
 
@@ -69,19 +72,19 @@ func (Table *Table) DBOpen(fileName string) {
 func (Table *Table) DBClose() {
 	numFullPages := Table.GetNumRows() / uint32(new(Row).GetRowSize())
 	for i := 0; i < int(numFullPages); i++ {
-		if Table.bufferpool.pages[i] == nil {
-			//空页
+		if Table.bufferpool.pages[i] == nil || !Table.modifyFLag {
+			//空页或未新增
 			continue
 		}
-		Table.bufferpool.FlushBack(uint32(i))
+		Table.bufferpool.FlushPageBack(uint32(i))
 		Table.bufferpool.pages[i] = nil
 	}
 	rowsPerPage := PageSize / new(Row).GetRowSize()
 	additionalRows := Table.numRows % uint32(rowsPerPage)
 	//有部分行数不足一页
-	if additionalRows > 0 {
+	if additionalRows > 0 && Table.modifyFLag {
 		pageNum := numFullPages
-		Table.bufferpool.FlushBack(pageNum)
+		Table.bufferpool.FlushRowsBack(pageNum, additionalRows)
 		Table.bufferpool.pages[pageNum] = nil
 	}
 }
