@@ -1,6 +1,7 @@
 package main
 
 import (
+	"MyDB/common"
 	"MyDB/storage"
 	"MyDB/util"
 	"encoding/binary"
@@ -99,12 +100,13 @@ func prepareStatament(statement *util.Statement, inputBuffer *util.InputBuffer) 
 	return PrepareUnrecognizedStatement, nil
 }
 
-func executeStatement(statement *util.Statement, table *storage.Table) int {
+func executeStatement(statement *util.Statement, table *storage.Table, cursor *common.Cursor) int {
+	cursor.TableEnd(table)
 	switch statement.GetStatementType() {
 	case StatementInsert:
-		return executeInsert(table, statement)
+		return executeInsert(table, statement, cursor)
 	case StatementSelect:
-		return executeSelect(table)
+		return executeSelect(table, cursor)
 	}
 	return ExecuteSuccess
 }
@@ -126,40 +128,46 @@ func GetRowsPerPage(row *storage.Row) uint32 {
 	return uint32(PageSize / row.GetRowSize())
 }
 
-func rowSlot(table *storage.Table, rowNum uint32) []byte {
+func cursorValue(cursor *common.Cursor) []byte {
+	table := cursor.GetTable()
+	rowNum := cursor.GetNumRows()
 	var pageNum uint32
 	pageNum = rowNum / GetRowsPerPage(new(storage.Row))
+
 	var page *storage.Page
 	page = table.GetPage(pageNum)
-	if page == nil {
-		//该页未有内容
-		page = new(storage.Page)
-		table.SetPage(pageNum, page)
-	}
 	rowOffset := rowNum % GetRowsPerPage(new(storage.Row))
+
 	var r storage.Row
 	byteOffset := rowOffset * uint32(r.GetRowSize())
 	return page.GetDestinationRow(byteOffset, &r)
 }
 
-func executeInsert(table *storage.Table, statement *util.Statement) int {
+func executeInsert(table *storage.Table, statement *util.Statement, cursor *common.Cursor) int {
 	//假设目前一个表最多1000行
 	if table.GetNumRows() >= 1000 {
 		return ExecuteTableFull
 	}
 	row := &statement.RowInsert
-	serializeRow(row, rowSlot(table, table.GetNumRows()))
+	serializeRow(row, cursorValue(cursor))
 	table.InsertRow()
 	return ExecuteSuccess
 }
 
-func executeSelect(table *storage.Table) int {
-	var row storage.Row
-	numRows := int(table.GetNumRows())
-	for i := 0; i < numRows; i++ {
-		deserializeRow(&row, rowSlot(table, uint32(i)))
+func executeSelect(table *storage.Table, cursor *common.Cursor) int {
+	cursor.TableStart(table)
+
+	row := new(storage.Row)
+
+	for !cursor.IsEOF() {
+		deserializeRow(row, cursorValue(cursor))
 		row.PrintRow()
+		cursor.CursorAdvance()
 	}
+	//for i := 0; i < numRows; i++ {
+	//	deserializeRow(&row, rowSlot(table, uint32(i)))
+	//	row.PrintRow()
+	//}
 	return ExecuteSuccess
 }
 
@@ -171,6 +179,7 @@ func main() {
 	}
 	var table storage.Table
 	table.DBOpen("MyData")
+	cursor := new(common.Cursor)
 	for true {
 		var state util.Statement
 		printPromt()
@@ -209,7 +218,7 @@ func main() {
 			continue
 		}
 
-		switch executeStatement(&state, &table) {
+		switch executeStatement(&state, &table, cursor) {
 		case ExecuteSuccess:
 			fmt.Println("Executed.")
 			break
